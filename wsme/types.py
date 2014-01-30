@@ -7,6 +7,7 @@ import re
 import six
 import sys
 import uuid
+import UserDict
 import weakref
 
 try:
@@ -102,6 +103,31 @@ class DictType(object):
                 validate_value(self.value_type, v)
             ) for key, v in value.items()
         ))
+
+
+class AdditionalType(object):
+    """Additional type collects data that did otherwise not get collected.
+
+    It only makes sense as an attribute of a complex type. Values will be in
+    available in a dictionary format. It is intended for use only when you are
+    unsure of the provided data.
+
+    It does not validate its data or obey other WSME encoding rules as its
+    contents are expected to be python native types (if you need to use a WSME
+    type in here then you know enough that you should use a named attribute).
+    """
+
+    def validate(self, value):
+        if not isinstance(value, dict):
+            msg = "Wrong type. Expected dict, got '%s'" % (type(value))
+            raise ValueError(msg)
+        return value
+
+additional = AdditionalType()
+
+
+def isadditional(datatype):
+    return isinstance(datatype, AdditionalType)
 
 
 class UserType(object):
@@ -646,7 +672,7 @@ class Registry(object):
         if class_ is None or \
                 class_ in native_types or \
                 isusertype(class_) or iscomplex(class_) or \
-                isarray(class_) or isdict(class_):
+                isarray(class_) or isdict(class_) or isadditional(class_):
             return class_
 
         if isinstance(class_, list):

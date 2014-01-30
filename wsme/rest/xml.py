@@ -62,12 +62,18 @@ def toxml(datatype, key, value):
         if wsme.types.isusertype(datatype):
             return toxml(datatype.basetype,
                          key, datatype.tobasetype(value))
+        elif wsme.types.isadditional(datatype):
+            if value is not wsme.types.Unset:
+                return [toxml(type(v), k, v) for k, v in six.iteritems(value)]
         elif wsme.types.iscomplex(datatype):
             for attrdef in datatype._wsme_attributes:
                 attrvalue = getattr(value, attrdef.key)
                 if attrvalue is not wsme.types.Unset:
-                    el.append(toxml(attrdef.datatype, attrdef.name,
-                                    attrvalue))
+                    ret = toxml(attrdef.datatype, attrdef.name, attrvalue)
+                    if isinstance(ret, list):
+                        el.extend(ret)
+                    else:
+                        el.append(ret)
         else:
             el.text = six.text_type(value)
     return el
@@ -98,7 +104,15 @@ def fromxml(datatype, element):
         return datatype.frombasetype(fromxml(datatype.basetype, element))
     if wsme.types.iscomplex(datatype):
         obj = datatype()
-        for attrdef in wsme.types.list_attributes(datatype):
+        attrdefs = wsme.types.list_attributes(datatype)
+        for attrdef in attrdefs:
+            if wsme.types.isadditional(attrdef.datatype):
+                names = [a.name for a in attrdefs]
+                # d = dict([i for i in six.iteritems(value)
+                #           if i[0] not in names])
+                setattr(obj, attrdef.key, d)
+                continue
+
             sub = element.find(attrdef.name)
             if sub is not None:
                 val_fromxml = fromxml(attrdef.datatype, sub)
@@ -179,6 +193,33 @@ def datetime_toxml(datatype, key, value):
         el.set('nil', 'true')
     else:
         el.text = value.isoformat()
+    return el
+
+
+@toxml.when_object(dict)
+def primative_dict_toxml(datatype, key, value):
+    el = et.Element(key)
+    if value is None:
+        el.set('nil', 'true')
+    else:
+        for k, v in six.iteritems(value):
+            key = toxml(type(k), 'key', k)
+            value = toxml(type(v), 'value', v)
+            node = et.Element('item')
+            node.append(key)
+            node.append(value)
+            el.append(node)
+    return el
+
+
+@toxml.when_type(list, set)
+def primarive_list_toxml(datatype, key, value):
+    el = et.Element(key)
+    if value is None:
+        el.set('nil', 'true')
+    else:
+        for item in value:
+            el.append(toxml(datatype.item_type, 'item', item))
     return el
 
 

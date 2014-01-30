@@ -52,7 +52,10 @@ def tojson(datatype, value):
         for attr in wsme.types.list_attributes(datatype):
             attr_value = getattr(value, attr.key)
             if attr_value is not Unset:
-                d[attr.name] = tojson(attr.datatype, attr_value)
+                if wsme.types.isadditional(attr.datatype):
+                    d.update(tojson(dict, attr_value))
+                else:
+                    d[attr.name] = tojson(attr.datatype, attr_value)
         return d
     elif wsme.types.isusertype(datatype):
         return tojson(datatype.basetype, datatype.tobasetype(value))
@@ -112,6 +115,17 @@ def datetime_tojson(datatype, value):
     return value.isoformat()
 
 
+@tojson.when_object(dict)
+def primative_dict_tojson(_datatype, value):
+    return dict((tojson(type(k), k), tojson(v,v))
+                 for k, v in six.iteritems(value))
+
+
+@tojson.when_object(list, set)
+def primative_list_tojson(_datatype, value):
+    return [tojson(type(i), i) for i in value]
+
+
 @generic
 def fromjson(datatype, value):
     """
@@ -133,8 +147,14 @@ def fromjson(datatype, value):
         return None
     if wsme.types.iscomplex(datatype):
         obj = datatype()
-        for attrdef in wsme.types.list_attributes(datatype):
-            if attrdef.name in value:
+        attrdefs = wsme.types.list_attributes(datatype)
+        for attrdef in attrdefs:
+            if wsme.types.isadditional(attrdef.datatype):
+                names = [a.name for a in attrdefs]
+                d = dict([i for i in six.iteritems(value)
+                          if i[0] not in names])
+                setattr(obj, attrdef.key, d)
+            elif attrdef.name in value:
                 val_fromjson = fromjson(attrdef.datatype, value[attrdef.name])
                 if getattr(attrdef, 'readonly', False):
                     raise InvalidInput(attrdef.name, val_fromjson,
@@ -143,6 +163,7 @@ def fromjson(datatype, value):
             elif attrdef.mandatory:
                 raise InvalidInput(attrdef.name, None,
                                    "Mandatory field missing.")
+
         return wsme.types.validate_value(datatype, obj)
     elif wsme.types.isusertype(datatype):
         value = datatype.frombasetype(

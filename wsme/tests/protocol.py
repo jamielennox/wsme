@@ -75,6 +75,11 @@ class NestedOuterApi(object):
     inner = NestedInnerApi()
 
 
+class WithAdditional(object):
+    aint = int
+    extra = wsme.types.additional
+
+
 class ReturnTypes(object):
     @expose(wsme.types.bytes)
     def getbytes(self):
@@ -159,6 +164,13 @@ class ReturnTypes(object):
     @expose(NamedAttrsObject)
     def getnamedattrsobj(self):
         return NamedAttrsObject(5, 6)
+
+    @expose(WithAdditional)
+    def getadditional(self):
+        obj = wsme.types.AdditionalType()
+        obj.aint = 1
+        obj.extra = {'foo': {'bar': 42}}
+        return obj
 
 
 class ArgTypes(object):
@@ -305,6 +317,15 @@ class ArgTypes(object):
         self.assertEquals(type(value), NamedAttrsObject)
         self.assertEquals(value.attr_1, 10)
         self.assertEquals(value.attr_2, 20)
+        return value
+
+    @expose(WithAdditional)
+    @validate(WithAdditional)
+    def setadditional(self, value):
+        print(value)
+        self.assertEquals(type(value), WithAdditional)
+        self.assertEquals(type(value.aint), int)
+        self.assertEquals(type(value.extra), dict)
         return value
 
 
@@ -521,6 +542,13 @@ class ProtocolTestCase(unittest.TestCase):
         r = self.call('returntypes/getnamedattrsobj', _rt=NamedAttrsObject)
         self.assertEquals(r, {'attr.1': 5, 'attr.2': 6})
 
+    def test_return_additional(self):
+        r = self.call('returntypes/getadditional', _rt=WithAdditional)
+        self.assertEquals(r, {
+            'aint': 1,
+            'foo': {'bar': 42}
+        })
+
     def test_setbytes(self):
         assert self.call('argtypes/setbytes', value=b('astring'),
                          _rt=wsme.types.bytes) == b('astring')
@@ -656,6 +684,13 @@ class ProtocolTestCase(unittest.TestCase):
         r = self.call('argtypes/setnamedattrsobj',
                       value=(value, NamedAttrsObject),
                       _rt=NamedAttrsObject)
+        self.assertEquals(r, value)
+
+    def test_setadditional(self):
+        value = {'aint': 1, 'foo': {'bar': 42}}
+        r = self.call('argtypes/setadditional',
+                      value=(value, WithAdditional),
+                      _rt=WithAdditional)
         self.assertEquals(r, value)
 
     def test_nested_api(self):

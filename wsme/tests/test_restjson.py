@@ -83,6 +83,8 @@ def prepare_result(value, datatype):
         return value
     if datatype == wsme.types.bytes:
         return value.encode('ascii')
+    if datatype == wsme.types.AdditionalType:
+        return value
     if type(value) != datatype:
         print(type(value), datatype)
         return datatype(value)
